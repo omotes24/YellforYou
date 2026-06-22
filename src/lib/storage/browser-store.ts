@@ -2,6 +2,7 @@ import {
   appStorageSchema,
   type AppStorage,
   type CompanyProfile,
+  type PreInterviewLearning,
   type SessionRecord,
   type UserProfile,
 } from "@/lib/schemas/interview";
@@ -12,6 +13,7 @@ export const defaultStorage: AppStorage = {
   profiles: [],
   companies: [],
   history: [],
+  learning: null,
   privacy: {
     saveHistoryByDefault: false,
   },
@@ -68,4 +70,11 @@ export function addSessionRecord(
   record: SessionRecord,
 ): AppStorage {
   return { ...storage, history: [record, ...storage.history].slice(0, 50) };
+}
+
+export function saveLearning(
+  storage: AppStorage,
+  learning: PreInterviewLearning,
+): AppStorage {
+  return { ...storage, learning };
 }

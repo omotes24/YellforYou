@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { MessageSquarePlus } from "lucide-react";
 
 import { AnswerWorkbench } from "@/components/answer/AnswerWorkbench";
+import { PreInterviewLearningPanel } from "@/components/answer/PreInterviewLearningPanel";
 import { AudioCapturePanel } from "@/components/audio/AudioCapturePanel";
 import { FormField, textareaClassName } from "@/components/forms/FormField";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -71,6 +72,8 @@ export function PracticeScreen() {
         description="面接官役の質問に回答し、回答内容の評価、改善点、回答例、STAR整理、深掘り質問を確認します。"
       />
       <div className="grid gap-4">
+        <PreInterviewLearningPanel />
+
         <section className="rounded-md border border-slate-200 bg-white p-4">
           <div className="flex flex-wrap items-end gap-3">
             <label className="grid gap-1 text-sm font-medium">

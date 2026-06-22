@@ -58,11 +58,88 @@ export const companyProfileSchema = z.object({
   interviewFocus: z.string(),
   attraction: z.string(),
   reverseQuestions: z.string(),
+  researchInput: z.string().default(""),
+  researchInstruction: z.string().default(""),
+  researchSummary: z.string().default(""),
+  researchSources: z.array(z.string()).default([]),
+  fitHypotheses: z.array(z.string()).default([]),
+  interviewAngles: z.array(z.string()).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 
 export type CompanyProfile = z.infer<typeof companyProfileSchema>;
+
+export const researchCompanyRequestSchema = z.object({
+  selfInfo: z.string().trim().min(1, "自分のことを入力してください"),
+  companyWebsite: z.string().trim().min(1, "企業Webサイトを入力してください"),
+  desiredCourse: z.string().trim().min(1, "志望コースを入力してください"),
+  additionalNotes: z.string().default(""),
+});
+
+export type ResearchCompanyRequest = z.infer<
+  typeof researchCompanyRequestSchema
+>;
+
+export const companyResearchOutputSchema = z.object({
+  label: z.string().min(1),
+  companyName: z.string(),
+  business: z.string(),
+  philosophy: z.string(),
+  targetRole: z.string(),
+  jobDescription: z.string(),
+  requiredSkills: z.string(),
+  interviewFocus: z.string(),
+  attraction: z.string(),
+  reverseQuestions: z.string(),
+  researchSummary: z.string(),
+  researchSources: z.array(z.string()),
+  fitHypotheses: z.array(z.string()),
+  interviewAngles: z.array(z.string()),
+});
+
+export type CompanyResearchOutput = z.infer<typeof companyResearchOutputSchema>;
+
+export const preInterviewLearningSchema = z.object({
+  brief: z.string(),
+  keyPoints: z.array(z.string()),
+  caution: z.string().nullable(),
+  learnedAt: z.string(),
+  companyId: z.string().nullable(),
+});
+
+export type PreInterviewLearning = z.infer<typeof preInterviewLearningSchema>;
+
+export const learnInterviewContextRequestSchema = z.object({
+  profile: userProfileSchema.nullable(),
+  company: companyProfileSchema.nullable(),
+  selfInfo: z.string().default(""),
+  desiredCourse: z.string().default(""),
+  additionalNotes: z.string().default(""),
+});
+
+export type LearnInterviewContextRequest = z.infer<
+  typeof learnInterviewContextRequestSchema
+>;
+
+export const learnInterviewContextOutputSchema = z.object({
+  brief: z.string(),
+  keyPoints: z.array(z.string()),
+  caution: z.string().nullable(),
+});
+
+export type LearnInterviewContextOutput = z.infer<
+  typeof learnInterviewContextOutputSchema
+>;
+
+export const legacyResearchCompanyRequestSchema = z.object({
+  websiteOrUrls: z
+    .string()
+    .trim()
+    .min(1, "WebサイトまたはURLを入力してください"),
+  instruction: z.string().trim().min(1, "志望内容・指示文を入力してください"),
+  profile: userProfileSchema.nullable(),
+});
 
 export const questionClassificationSchema = z.object({
   isQuestion: z.boolean(),
@@ -103,6 +180,7 @@ export const generateAnswerRequestSchema = z.object({
   category: questionCategorySchema.default("other"),
   profile: userProfileSchema.nullable(),
   company: companyProfileSchema.nullable(),
+  learningBrief: z.string().default(""),
 });
 
 export type GenerateAnswerRequest = z.infer<typeof generateAnswerRequestSchema>;
@@ -123,6 +201,7 @@ export const appStorageSchema = z.object({
   profiles: z.array(userProfileSchema),
   companies: z.array(companyProfileSchema),
   history: z.array(sessionRecordSchema),
+  learning: preInterviewLearningSchema.nullable().default(null),
   privacy: z.object({
     saveHistoryByDefault: z.boolean(),
   }),
@@ -170,6 +249,12 @@ export function createEmptyCompanyProfile(): CompanyProfile {
     interviewFocus: "",
     attraction: "",
     reverseQuestions: "",
+    researchInput: "",
+    researchInstruction: "",
+    researchSummary: "",
+    researchSources: [],
+    fitHypotheses: [],
+    interviewAngles: [],
     createdAt: now,
     updatedAt: now,
   };

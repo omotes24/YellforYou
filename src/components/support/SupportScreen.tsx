@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 
 import { AnswerWorkbench } from "@/components/answer/AnswerWorkbench";
+import { PreInterviewLearningPanel } from "@/components/answer/PreInterviewLearningPanel";
 import { AudioCapturePanel } from "@/components/audio/AudioCapturePanel";
 import { PageHeader } from "@/components/layout/PageHeader";
 
@@ -41,6 +42,7 @@ export function SupportScreen() {
             <CheckCircle2 className="h-4 w-4" aria-hidden />
             AI支援利用中であることを常時表示しています。
           </div>
+          <PreInterviewLearningPanel />
           <AudioCapturePanel
             autoSubmitRemoteFinal
             onRemoteTranscript={(text) =>

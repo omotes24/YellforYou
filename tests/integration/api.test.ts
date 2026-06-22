@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { POST as classifyQuestion } from "@/app/api/classify-question/route";
 import { POST as generateAnswer } from "@/app/api/generate-answer/route";
+import { POST as learnInterviewContext } from "@/app/api/learn-interview-context/route";
+import { POST as researchCompany } from "@/app/api/research-company/route";
 import {
   createEmptyCompanyProfile,
   createEmptyUserProfile,
@@ -61,5 +63,45 @@ describe("API routes in mock mode", () => {
     expect(text).toContain("event: partial");
     expect(text).toContain("event: done");
     expect(text).toContain("サンプル株式会社");
+  });
+
+  it("researches a company slot in mock mode", async () => {
+    const response = await researchCompany(
+      new Request("http://localhost/api/research-company", {
+        method: "POST",
+        body: JSON.stringify({
+          selfInfo: "SatoFCで野生動物追跡システムを実装した",
+          companyWebsite: "https://example.com/recruit",
+          desiredCourse: "A職 Bコース",
+          additionalNotes: "現場実装経験を接続したい",
+        }),
+      }),
+    );
+
+    expect(response.ok).toBe(true);
+    await expect(response.json()).resolves.toMatchObject({
+      targetRole: "A職 Bコース",
+      researchSources: ["https://example.com/recruit"],
+    });
+  });
+
+  it("creates a pre-interview learning memo in mock mode", async () => {
+    const response = await learnInterviewContext(
+      new Request("http://localhost/api/learn-interview-context", {
+        method: "POST",
+        body: JSON.stringify({
+          profile: createEmptyUserProfile(),
+          company: createEmptyCompanyProfile(),
+          selfInfo: "SatoFCの現場実装経験",
+          desiredCourse: "A職 Bコース",
+          additionalNotes: "深掘り質問を想定",
+        }),
+      }),
+    );
+
+    expect(response.ok).toBe(true);
+    await expect(response.json()).resolves.toMatchObject({
+      keyPoints: expect.any(Array),
+    });
   });
 });

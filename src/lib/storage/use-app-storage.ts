@@ -8,12 +8,14 @@ import {
   defaultStorage,
   loadAppStorage,
   saveAppStorage,
+  saveLearning,
   upsertCompany,
   upsertProfile,
 } from "@/lib/storage/browser-store";
 import type {
   AppStorage,
   CompanyProfile,
+  PreInterviewLearning,
   SessionRecord,
   UserProfile,
 } from "@/lib/schemas/interview";
@@ -57,6 +59,12 @@ export function useAppStorage() {
       },
       saveSession(record: SessionRecord) {
         commit(addSessionRecord(storage, record));
+      },
+      saveLearning(learning: PreInterviewLearning) {
+        commit(saveLearning(storage, learning));
+      },
+      clearLearning() {
+        commit({ ...storage, learning: null });
       },
       deleteSession(id: string) {
         commit({

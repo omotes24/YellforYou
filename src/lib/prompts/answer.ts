@@ -33,9 +33,17 @@ const companyLabels: Array<[keyof CompanyProfile, string]> = [
   ["interviewFocus", "面接で重視されそうな事項"],
   ["attraction", "ユーザーが感じている企業の魅力"],
   ["reverseQuestions", "逆質問候補"],
+  ["researchSummary", "企業調査サマリー"],
 ];
 
-function formatSection<T extends Record<string, string>>(
+function formatValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.filter(Boolean).join(" / ");
+  }
+  return typeof value === "string" ? value : "";
+}
+
+function formatSection<T extends object>(
   title: string,
   data: T | null,
   labels: Array<[keyof T, string]>,
@@ -45,7 +53,7 @@ function formatSection<T extends Record<string, string>>(
   }
   const lines = labels
     .map(([key, label]) => {
-      const value = data[key]?.trim();
+      const value = formatValue(data[key]).trim();
       return value ? `- ${label}: ${value}` : null;
     })
     .filter(Boolean);
@@ -87,6 +95,9 @@ export function buildAnswerInput(request: GenerateAnswerRequest): string {
   return [
     `質問: ${request.question}`,
     `分類: ${request.category}`,
+    request.learningBrief
+      ? `面接前理解メモ: ${request.learningBrief}`
+      : "面接前理解メモ: 未作成",
     "",
     buildEvidenceBlock(request.profile, request.company),
   ].join("\n");

@@ -5,6 +5,7 @@ const serverEnvSchema = z.object({
   OPENAI_TRANSCRIPTION_MODEL: z.string().default("gpt-realtime-whisper"),
   OPENAI_CLASSIFIER_MODEL: z.string().default("gpt-5.4-nano"),
   OPENAI_ANSWER_MODEL: z.string().default("gpt-5.4-mini"),
+  OPENAI_RESEARCH_MODEL: z.string().default("gpt-5.5"),
   OPENAI_MOCK_MODE: z
     .enum(["true", "false", "1", "0"])
     .default("false")
@@ -19,6 +20,7 @@ export function getServerEnv(): ServerEnv {
     OPENAI_TRANSCRIPTION_MODEL: process.env.OPENAI_TRANSCRIPTION_MODEL,
     OPENAI_CLASSIFIER_MODEL: process.env.OPENAI_CLASSIFIER_MODEL,
     OPENAI_ANSWER_MODEL: process.env.OPENAI_ANSWER_MODEL,
+    OPENAI_RESEARCH_MODEL: process.env.OPENAI_RESEARCH_MODEL,
     OPENAI_MOCK_MODE: process.env.OPENAI_MOCK_MODE,
   });
 }

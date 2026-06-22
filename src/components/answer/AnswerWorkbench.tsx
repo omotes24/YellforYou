@@ -100,6 +100,7 @@ export function AnswerWorkbench({
 
   const activeProfile = storage.profiles[0] ?? null;
   const activeCompany = storage.companies[0] ?? null;
+  const activeLearningBrief = storage.learning?.brief ?? "";
   const length = useMemo(
     () => validateAnswerLength(finalDraft?.answer ?? draft.answer ?? ""),
     [draft.answer, finalDraft?.answer],
@@ -154,6 +155,7 @@ export function AnswerWorkbench({
             category: classificationResult.category,
             profile: activeProfile,
             company: activeCompany,
+            learningBrief: activeLearningBrief,
           }),
           signal: controller.signal,
         });
@@ -192,7 +194,14 @@ export function AnswerWorkbench({
         setLoading(false);
       }
     },
-    [abortController, activeCompany, activeProfile, autoSource, question],
+    [
+      abortController,
+      activeCompany,
+      activeLearningBrief,
+      activeProfile,
+      autoSource,
+      question,
+    ],
   );
 
   useEffect(() => {
