@@ -27,7 +27,7 @@ test("manual question flow with mock OpenAI", async ({ page }) => {
   await page
     .getByLabel("参加者へAI支援利用を明示し、必要な同意を得ています。")
     .check();
-  await page.getByRole("button", { name: "面接前に学習" }).click();
+  await page.getByRole("button", { name: "学習開始" }).click();
   await expect(page.getByText("理解済み")).toBeVisible();
   await page
     .getByLabel("手動質問入力")

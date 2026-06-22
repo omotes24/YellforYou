@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, MonitorUp, Square, Wand2 } from "lucide-react";
 
+import { useRealtimeTranscription } from "@/components/audio/use-realtime-transcription";
 import {
   requestDisplayAudio,
   requestMicrophone,
   stopMediaStream,
 } from "@/lib/audio/media";
 import { cn } from "@/lib/utils";
-import { useRealtimeTranscription } from "@/components/audio/use-realtime-transcription";
 
 type AudioCapturePanelProps = {
   onRemoteTranscript?: (text: string) => void;
@@ -23,8 +23,28 @@ export function AudioCapturePanel({
   const transcription = useRealtimeTranscription();
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [activeSource, setActiveSource] = useState<"remote" | "local" | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const submittedIdsRef = useRef<Set<string>>(new Set());
+
+  const isConnecting = transcription.status === "connecting";
+  const isRecording = transcription.status === "live";
+  const isAudioBusy = isConnecting || isRecording;
+  const statusLabel = isRecording
+    ? "録音中"
+    : isConnecting
+      ? "接続中"
+      : transcription.status === "error"
+        ? "エラー"
+        : "待機中";
+  const sourceLabel =
+    activeSource === "remote"
+      ? "タブ・画面音声"
+      : activeSource === "local"
+        ? "マイク"
+        : "未選択";
 
   useEffect(() => {
     if (!autoSubmitRemoteFinal || !onRemoteTranscript) {
@@ -48,6 +68,7 @@ export function AudioCapturePanel({
       setError(null);
       const stream = await requestMicrophone();
       setLocalStream(stream);
+      setActiveSource("local");
       await transcription.start(stream, "local");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "マイク取得エラー");
@@ -59,6 +80,7 @@ export function AudioCapturePanel({
       setError(null);
       const stream = await requestDisplayAudio();
       setRemoteStream(stream);
+      setActiveSource("remote");
       await transcription.start(stream, "remote");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "画面音声取得エラー");
@@ -71,10 +93,18 @@ export function AudioCapturePanel({
     stopMediaStream(remoteStream);
     setLocalStream(null);
     setRemoteStream(null);
+    setActiveSource(null);
   }
 
   return (
-    <section className="rounded-[28px] border border-neutral-950/10 bg-white p-5 shadow-sm">
+    <section
+      className={cn(
+        "rounded-[28px] border bg-white p-5 shadow-sm transition",
+        isRecording
+          ? "border-red-500 shadow-red-500/10"
+          : "border-neutral-950/10",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-red-600">
@@ -84,52 +114,111 @@ export function AudioCapturePanel({
             音声入力
           </h2>
           <p className="mt-2 text-sm font-medium leading-6 text-neutral-600">
-            remoteStream は質問判定に使用し、localMicStream
-            は自動生成に使いません。
+            録音開始後、相手の質問を文字起こしして回答案に使います。
           </p>
         </div>
         <span
           className={cn(
-            "rounded-full border px-3 py-1.5 text-xs font-semibold",
-            transcription.status === "live"
-              ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-              : "border-neutral-950/10 bg-neutral-50 text-neutral-600",
+            "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold",
+            isRecording
+              ? "border-red-300 bg-red-50 text-red-700"
+              : isConnecting
+                ? "border-amber-300 bg-amber-50 text-amber-800"
+                : transcription.status === "error"
+                  ? "border-red-300 bg-red-50 text-red-700"
+                  : "border-neutral-950/10 bg-neutral-50 text-neutral-600",
           )}
         >
-          {transcription.status}
+          {isRecording ? (
+            <span
+              className="h-2.5 w-2.5 rounded-full bg-red-600 motion-safe:animate-pulse"
+              aria-hidden
+            />
+          ) : null}
+          {statusLabel}
         </span>
       </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={startRemoteAudio}
-          className="inline-flex h-11 items-center gap-2 rounded-full bg-neutral-950 px-5 text-sm font-semibold text-white transition hover:bg-red-600"
-        >
-          <MonitorUp className="h-4 w-4" aria-hidden />
-          タブ・画面音声を共有
-        </button>
+
+      <div
+        className={cn(
+          "mt-5 rounded-[24px] border p-4 transition",
+          isRecording
+            ? "border-red-200 bg-red-50"
+            : "border-neutral-950/10 bg-neutral-50",
+        )}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p
+              className={cn(
+                "text-xs font-semibold uppercase tracking-[0.22em]",
+                isRecording ? "text-red-600" : "text-neutral-500",
+              )}
+            >
+              {isRecording ? "Recording" : "Ready"}
+            </p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight">
+              {isRecording
+                ? `${sourceLabel}を録音中`
+                : isConnecting
+                  ? `${sourceLabel}に接続中`
+                  : "録音を開始できます"}
+            </p>
+          </div>
+          {isRecording ? (
+            <span className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white">
+              <span
+                className="h-2.5 w-2.5 rounded-full bg-white motion-safe:animate-pulse"
+                aria-hidden
+              />
+              LIVE
+            </span>
+          ) : null}
+        </div>
+
+        <div className="mt-4 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <button
+            type="button"
+            onClick={startRemoteAudio}
+            disabled={isAudioBusy}
+            className={cn(
+              "inline-flex min-h-16 items-center justify-center gap-3 rounded-3xl px-5 text-base font-semibold shadow-sm transition disabled:cursor-not-allowed",
+              isRecording && activeSource === "remote"
+                ? "bg-red-600 text-white"
+                : "bg-neutral-950 text-white hover:bg-red-600 disabled:bg-neutral-400",
+            )}
+          >
+            <MonitorUp className="h-5 w-5" aria-hidden />
+            {isRecording && activeSource === "remote" ? "録音中" : "録音開始"}
+          </button>
+          <button
+            type="button"
+            onClick={stopAll}
+            disabled={!isAudioBusy}
+            className="inline-flex min-h-16 items-center justify-center gap-3 rounded-3xl border border-red-300 bg-white px-5 text-base font-semibold text-red-700 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-neutral-950/10 disabled:text-neutral-400"
+          >
+            <Square className="h-5 w-5" aria-hidden />
+            停止
+          </button>
+        </div>
+
         <button
           type="button"
           onClick={startMic}
-          className="inline-flex h-11 items-center gap-2 rounded-full border border-neutral-950/15 bg-white px-5 text-sm font-semibold transition hover:border-neutral-950"
+          disabled={isAudioBusy}
+          className="mt-3 inline-flex h-11 items-center gap-2 rounded-full border border-neutral-950/15 bg-white px-5 text-sm font-semibold text-neutral-900 transition hover:border-neutral-950 disabled:cursor-not-allowed disabled:text-neutral-400"
         >
           <Mic className="h-4 w-4" aria-hidden />
-          マイクを開始
-        </button>
-        <button
-          type="button"
-          onClick={stopAll}
-          className="inline-flex h-11 items-center gap-2 rounded-full border border-red-300 bg-white px-5 text-sm font-semibold text-red-700 transition hover:bg-red-50"
-        >
-          <Square className="h-4 w-4" aria-hidden />
-          停止
+          マイクのみ開始
         </button>
       </div>
+
       {error || transcription.error ? (
         <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900">
           {error ?? transcription.error}
         </p>
       ) : null}
+
       <div className="mt-4 grid gap-2">
         <h3 className="text-sm font-semibold">リアルタイム文字起こし</h3>
         {transcription.items.length === 0 ? (

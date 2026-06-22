@@ -72,25 +72,25 @@ export function PreInterviewLearningPanel() {
           </span>
         ) : null}
       </div>
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <button
           type="button"
           onClick={learn}
           disabled={loading}
-          className="inline-flex h-11 items-center gap-2 rounded-full bg-neutral-950 px-5 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-neutral-400"
+          className="inline-flex min-h-16 items-center justify-center gap-3 rounded-3xl bg-neutral-950 px-6 text-base font-semibold text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-neutral-400"
         >
           {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
           ) : (
-            <Brain className="h-4 w-4" aria-hidden />
+            <Brain className="h-5 w-5" aria-hidden />
           )}
-          面接前に学習
+          {loading ? "学習中" : storage.learning ? "再学習" : "学習開始"}
         </button>
         {storage.learning ? (
           <button
             type="button"
             onClick={actions.clearLearning}
-            className="inline-flex h-11 items-center gap-2 rounded-full border border-neutral-950/15 bg-white px-5 text-sm font-semibold text-neutral-900 transition hover:border-neutral-950"
+            className="inline-flex min-h-16 items-center justify-center gap-2 rounded-3xl border border-neutral-950/15 bg-white px-5 text-sm font-semibold text-neutral-900 transition hover:border-neutral-950"
           >
             <X className="h-4 w-4" aria-hidden />
             解除
