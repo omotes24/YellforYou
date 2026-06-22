@@ -2,6 +2,36 @@ const API_KEY_PATTERN = /\b(sk-(?:proj|svc|admin)?-[A-Za-z0-9_-]{12,})\b/g;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const PHONE_PATTERN = /(?:\+?\d[\d -]{8,}\d)/g;
 
+function toOpenAIFriendlyError(message: string): string | null {
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("exceeded your current quota") ||
+    normalized.includes("insufficient_quota") ||
+    normalized.includes("usage limit") ||
+    normalized.includes("billing")
+  ) {
+    return [
+      "OpenAI API の利用枠または請求設定により実行できません。",
+      "Platform の Billing / Usage Limits で支払い方法、月次予算、残高を確認してください。",
+      "動作確認だけなら .env.local の OPENAI_MOCK_MODE=true にしてサーバーを再起動すると、OpenAI API を呼ばずに使えます。",
+    ].join(" ");
+  }
+
+  if (
+    normalized.includes("rate limit") ||
+    normalized.includes("too many requests") ||
+    normalized.includes("429")
+  ) {
+    return [
+      "OpenAI API のレート制限に達しました。",
+      "少し待ってから再実行してください。連続実行しても失敗リクエストが制限に加算されるため、時間を空ける必要があります。",
+    ].join(" ");
+  }
+
+  return null;
+}
+
 export function maskSensitiveText(input: unknown): string {
   const text =
     typeof input === "string" ? input : (JSON.stringify(input, null, 2) ?? "");
@@ -13,7 +43,9 @@ export function maskSensitiveText(input: unknown): string {
 
 export function toPublicError(error: unknown): string {
   if (error instanceof Error) {
-    return maskSensitiveText(error.message);
+    return (
+      toOpenAIFriendlyError(error.message) ?? maskSensitiveText(error.message)
+    );
   }
   return "予期しないエラーが発生しました";
 }
