@@ -8,6 +8,8 @@ import {
 } from "@/lib/schemas/interview";
 
 export const STORAGE_KEY = "jp-interview-assistant:v1";
+export const COMPANY_FORM_DRAFT_KEY =
+  "jp-interview-assistant:company-form-draft:v1";
 
 export const defaultStorage: AppStorage = {
   profiles: [],
@@ -43,6 +45,7 @@ export function clearAppStorage(): void {
     return;
   }
   window.localStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem(COMPANY_FORM_DRAFT_KEY);
 }
 
 export function upsertProfile(
@@ -59,9 +62,10 @@ export function upsertCompany(
   storage: AppStorage,
   company: CompanyProfile,
 ): AppStorage {
-  const companies = storage.companies.some((item) => item.id === company.id)
-    ? storage.companies.map((item) => (item.id === company.id ? company : item))
-    : [...storage.companies, company];
+  const companies = [
+    company,
+    ...storage.companies.filter((item) => item.id !== company.id),
+  ];
   return { ...storage, companies };
 }
 

@@ -12,23 +12,23 @@ import { AppShell } from "@/components/layout/AppShell";
 const steps = [
   {
     href: "/profile",
-    label: "01",
-    title: "自分を入れる",
-    body: "サークル、開発経験、強み、弱みを貼る。",
+    label: "1",
+    title: "自分のプロフィールを入力",
+    body: "経験、強み、弱み、話したい材料を整理する。",
     icon: UserRound,
   },
   {
     href: "/company",
-    label: "02",
-    title: "会社を作る",
-    body: "会社名、Webサイト、志望コースからスロット化する。",
+    label: "2",
+    title: "会社/面接の情報を入力する",
+    body: "会社名、Webサイト、志望コースを登録する。",
     icon: BriefcaseBusiness,
   },
   {
     href: "/support",
-    label: "03",
-    title: "面接で使う",
-    body: "同意確認後、質問を入れて回答案を見る。",
+    label: "3",
+    title: "面接を録音し回答をOutputする",
+    body: "質問を聞き取り、回答案を出力する。",
     icon: UsersRound,
   },
 ];

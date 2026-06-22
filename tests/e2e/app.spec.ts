@@ -21,6 +21,17 @@ test("manual question flow with mock OpenAI", async ({ page }) => {
     .fill("https://sample.example.com/recruit");
   await page.getByLabel("志望コース").fill("プロダクト職 現場課題解決コース");
   await page.getByLabel("その他").fill("SatoFCの経験を中心に話したい");
+
+  await page.goto("/support");
+  await page.goto("/company");
+  await expect(page.getByLabel("会社名")).toHaveValue("サンプル株式会社");
+  await expect(page.getByLabel("企業Webサイト")).toHaveValue(
+    "https://sample.example.com/recruit",
+  );
+  await expect(page.getByLabel("志望コース")).toHaveValue(
+    "プロダクト職 現場課題解決コース",
+  );
+
   await page.getByRole("button", { name: "学習用スロット作成" }).click();
   await expect(page.getByText("SLOT 1")).toBeVisible();
   await expect(
@@ -28,11 +39,14 @@ test("manual question flow with mock OpenAI", async ({ page }) => {
   ).toBeVisible();
 
   await page.goto("/support");
-  await page
-    .getByLabel("参加者へAI支援利用を明示し、必要な同意を得ています。")
-    .check();
+  await expect(
+    page.getByRole("heading", {
+      name: "サンプル株式会社の面接を始めましょう！",
+    }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "学習開始" }).click();
-  await expect(page.getByText("理解済み")).toBeVisible();
+  await expect(page.getByText("学習済み", { exact: true })).toBeVisible();
+  await expect(page.getByText("LLM学習済み")).toBeVisible();
   await page
     .getByLabel("手動質問入力")
     .fill("これまでの経験について教えてください。");

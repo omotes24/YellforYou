@@ -100,7 +100,10 @@ export function AnswerWorkbench({
 
   const activeProfile = storage.profiles[0] ?? null;
   const activeCompany = storage.companies[0] ?? null;
-  const activeLearningBrief = storage.learning?.brief ?? "";
+  const activeLearningBrief =
+    storage.learning?.companyId === (activeCompany?.id ?? null)
+      ? storage.learning.brief
+      : "";
   const length = useMemo(
     () => validateAnswerLength(finalDraft?.answer ?? draft.answer ?? ""),
     [draft.answer, finalDraft?.answer],

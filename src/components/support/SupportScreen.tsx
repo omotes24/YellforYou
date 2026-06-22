@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2 } from "lucide-react";
 
 import { AnswerWorkbench } from "@/components/answer/AnswerWorkbench";
 import { PreInterviewLearningPanel } from "@/components/answer/PreInterviewLearningPanel";
 import { AudioCapturePanel } from "@/components/audio/AudioCapturePanel";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { useAppStorage } from "@/lib/storage/use-app-storage";
 
 export function SupportScreen() {
-  const [consent, setConsent] = useState(false);
+  const { storage } = useAppStorage();
+  const activeCompany = storage.companies[0] ?? null;
+  const activeCompanyName = activeCompany?.companyName || activeCompany?.label;
   const [selectedTranscript, setSelectedTranscript] = useState<{
     id: string;
     text: string;
@@ -19,46 +21,35 @@ export function SupportScreen() {
     <section>
       <PageHeader
         title="面接"
-        description="面接前に学習し、質問を入力して回答案を作ります。音声を使う場合は、参加者へAI支援利用を明示してから開始します。"
+        description="面接前に学習し、質問を入力または録音して回答案を作ります。"
       />
-      <div className="mb-4 rounded-[28px] border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
-        <label className="flex items-start gap-3 text-sm font-semibold leading-6 text-emerald-950">
-          <input
-            type="checkbox"
-            checked={consent}
-            onChange={(event) => setConsent(event.target.checked)}
-            className="mt-1 h-4 w-4"
-          />
-          <span>参加者へAI支援利用を明示し、必要な同意を得ています。</span>
-        </label>
+      <div className="mb-4 rounded-[28px] border border-neutral-950/10 bg-white p-5 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-red-600">
+          Current Company
+        </p>
+        <h2 className="mt-2 text-3xl font-semibold tracking-tight text-neutral-950">
+          {activeCompanyName
+            ? `${activeCompanyName}の面接を始めましょう！`
+            : "会社スロットを作成して面接を始めましょう。"}
+        </h2>
       </div>
-      {!consent ? (
-        <div className="rounded-[28px] border border-neutral-950/10 bg-white p-6 text-sm font-medium leading-7 text-neutral-600 shadow-sm">
-          上の確認を完了すると、音声入力と回答案作成を開始できます。
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-800 shadow-sm">
-            <CheckCircle2 className="h-4 w-4" aria-hidden />
-            AI支援利用中であることを常時表示しています。
-          </div>
-          <PreInterviewLearningPanel />
-          <AudioCapturePanel
-            autoSubmitRemoteFinal
-            onRemoteTranscript={(text) =>
-              setSelectedTranscript({ id: crypto.randomUUID(), text })
-            }
-          />
-          <AnswerWorkbench
-            key={selectedTranscript?.id ?? "manual"}
-            mode="support"
-            initialQuestion={selectedTranscript?.text ?? ""}
-            autoSource={selectedTranscript ? "remote-audio" : "manual"}
-            autoGenerate={Boolean(selectedTranscript)}
-            autoRunId={selectedTranscript?.id}
-          />
-        </div>
-      )}
+      <div className="grid gap-4">
+        <PreInterviewLearningPanel />
+        <AudioCapturePanel
+          autoSubmitRemoteFinal
+          onRemoteTranscript={(text) =>
+            setSelectedTranscript({ id: crypto.randomUUID(), text })
+          }
+        />
+        <AnswerWorkbench
+          key={selectedTranscript?.id ?? "manual"}
+          mode="support"
+          initialQuestion={selectedTranscript?.text ?? ""}
+          autoSource={selectedTranscript ? "remote-audio" : "manual"}
+          autoGenerate={Boolean(selectedTranscript)}
+          autoRunId={selectedTranscript?.id}
+        />
+      </div>
     </section>
   );
 }

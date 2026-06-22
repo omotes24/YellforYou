@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Brain, CheckCircle2, Loader2, X } from "lucide-react";
+import { Brain, Building2, CheckCircle2, Loader2, X } from "lucide-react";
 
 import { useAppStorage } from "@/lib/storage/use-app-storage";
 
@@ -9,13 +9,17 @@ export function PreInterviewLearningPanel() {
   const { storage, actions } = useAppStorage();
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const company = storage.companies[0] ?? null;
+  const companyName = company?.companyName || company?.label || "";
+  const learningMatchesCompany =
+    Boolean(storage.learning) &&
+    storage.learning?.companyId === (company?.id ?? null);
 
   async function learn() {
     setLoading(true);
     setStatus(null);
     try {
       const profile = storage.profiles[0] ?? null;
-      const company = storage.companies[0] ?? null;
       const response = await fetch("/api/learn-interview-context", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -62,16 +66,42 @@ export function PreInterviewLearningPanel() {
             面接前に学習
           </h2>
           <p className="mt-2 text-sm font-medium leading-6 text-neutral-600">
-            自分のことと会社スロットを読み込み、回答案の前提を作ります。
+            {learningMatchesCompany
+              ? "この会社の理解メモを回答案に使います。"
+              : companyName
+                ? "まだこの会社の面接前学習は完了していません。学習開始を押してください。"
+                : "会社スロットを作成すると、会社名に合わせて面接前学習を始められます。"}
           </p>
         </div>
-        {storage.learning ? (
-          <span className="inline-flex h-10 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-4 text-xs font-semibold text-emerald-800">
+        <span
+          className={[
+            "inline-flex h-10 items-center gap-1.5 rounded-full border px-4 text-xs font-semibold",
+            learningMatchesCompany
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-neutral-950/10 bg-neutral-100 text-neutral-600",
+          ].join(" ")}
+        >
+          {learningMatchesCompany ? (
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-            理解済み
-          </span>
-        ) : null}
+          ) : null}
+          {learningMatchesCompany ? "学習済み" : "未学習"}
+        </span>
       </div>
+      {learningMatchesCompany && companyName ? (
+        <div className="mt-4 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-700 shadow-sm">
+            <Building2 className="h-5 w-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              LLM学習済み
+            </p>
+            <p className="truncate text-base font-semibold tracking-tight text-emerald-950">
+              {companyName}
+            </p>
+          </div>
+        </div>
+      ) : null}
       <div className="mt-5 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
         <button
           type="button"
@@ -84,7 +114,7 @@ export function PreInterviewLearningPanel() {
           ) : (
             <Brain className="h-5 w-5" aria-hidden />
           )}
-          {loading ? "学習中" : storage.learning ? "再学習" : "学習開始"}
+          {loading ? "学習中" : learningMatchesCompany ? "再学習" : "学習開始"}
         </button>
         {storage.learning ? (
           <button
@@ -102,7 +132,7 @@ export function PreInterviewLearningPanel() {
           {status}
         </p>
       ) : null}
-      {storage.learning ? (
+      {learningMatchesCompany && storage.learning ? (
         <div className="mt-4 rounded-2xl bg-neutral-50 p-4 text-sm font-medium leading-7 text-neutral-700">
           <p>{storage.learning.brief}</p>
         </div>
