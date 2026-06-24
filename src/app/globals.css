@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+:root,
+html[data-app-theme="blue"] {
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --accent: #0071e3;
+  --accent-hover: #147ce5;
+  --accent-soft: #e8f2ff;
+  --accent-ring: rgb(0 113 227 / 0.1);
+  --accent-ring-strong: rgb(0 113 227 / 0.15);
+}
+
+html[data-app-theme="red"] {
+  --accent: #dc2626;
+  --accent-hover: #b91c1c;
+  --accent-soft: #fee2e2;
+  --accent-ring: rgb(220 38 38 / 0.1);
+  --accent-ring-strong: rgb(220 38 38 / 0.15);
+}
+
+html[data-app-theme="orange"] {
+  --accent: #ea580c;
+  --accent-hover: #c2410c;
+  --accent-soft: #ffedd5;
+  --accent-ring: rgb(234 88 12 / 0.1);
+  --accent-ring-strong: rgb(234 88 12 / 0.15);
+}
+
+html[data-app-theme="green"] {
+  --accent: #059669;
+  --accent-hover: #047857;
+  --accent-soft: #d1fae5;
+  --accent-ring: rgb(5 150 105 / 0.1);
+  --accent-ring-strong: rgb(5 150 105 / 0.15);
+}
+
+html[data-app-theme="pink"] {
+  --accent: #db2777;
+  --accent-hover: #be185d;
+  --accent-soft: #fce7f3;
+  --accent-ring: rgb(219 39 119 / 0.1);
+  --accent-ring-strong: rgb(219 39 119 / 0.15);
+}
+
+html[data-app-theme="purple"] {
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent-soft: #f3e8ff;
+  --accent-ring: rgb(124 58 237 / 0.1);
+  --accent-ring-strong: rgb(124 58 237 / 0.15);
+}
+
+html[data-app-theme="black"] {
+  --accent: #1d1d1f;
+  --accent-hover: #424245;
+  --accent-soft: #f5f5f7;
+  --accent-ring: rgb(29 29 31 / 0.1);
+  --accent-ring-strong: rgb(29 29 31 / 0.15);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+    Meiryo, sans-serif;
+  font-feature-settings:
+    "palt" 1,
+    "kern" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+.typing-cursor {
+  display: inline-block;
+  width: 0.08em;
+  height: 0.78em;
+  margin-left: 0.08em;
+  background: var(--accent);
+  transform: translateY(0.08em);
+  animation: typing-cursor-blink 0.86s steps(1, end) infinite;
+}
+
+@keyframes typing-cursor-blink {
+  0%,
+  48% {
+    opacity: 1;
+  }
+
+  49%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-cursor {
+    animation: none;
+    opacity: 0;
+  }
+}
