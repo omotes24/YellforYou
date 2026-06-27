@@ -1,18 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   addSessionRecord,
   APP_STORAGE_EVENT,
   clearAppStorage,
   defaultStorage,
+  deleteGroupDiscussionSession,
   getActiveCompany,
   getActiveCompanies,
   getActiveProfile,
   getActiveProfiles,
-  loadAppStorage,
-  saveAppStorage,
+  LOCAL_STORAGE_IMPORT_STATUS_KEY,
   saveLearning,
   setActiveCompany,
   setActiveProfile,
@@ -20,9 +20,11 @@ import {
   setSelectedProfiles,
   toggleSelectedCompany,
   toggleSelectedProfile,
+  upsertGroupDiscussionSession,
   upsertCompany,
   upsertProfile,
 } from "@/lib/storage/browser-store";
+import type { GroupDiscussionSessionRecord } from "@/lib/schemas/groupDiscussion";
 import type {
   AppStorage,
   CompanyProfile,
@@ -31,41 +33,125 @@ import type {
   UserProfile,
 } from "@/lib/schemas/interview";
 
+const ACTIVE_COMPANY_SESSION_KEY =
+  "jp-interview-assistant:active-company-id:v1";
+
+function readPreferredActiveCompanyId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.sessionStorage.getItem(ACTIVE_COMPANY_SESSION_KEY);
+}
+
+function writePreferredActiveCompanyId(id: string | null): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (id) {
+    window.sessionStorage.setItem(ACTIVE_COMPANY_SESSION_KEY, id);
+    return;
+  }
+  window.sessionStorage.removeItem(ACTIVE_COMPANY_SESSION_KEY);
+}
+
+function preferSessionActiveCompany(storage: AppStorage): AppStorage {
+  const preferredCompanyId = readPreferredActiveCompanyId();
+  if (!preferredCompanyId) {
+    return storage;
+  }
+  if (
+    storage.companies.some((company) => company.id === preferredCompanyId)
+  ) {
+    return setActiveCompany(storage, preferredCompanyId);
+  }
+  writePreferredActiveCompanyId(null);
+  return storage;
+}
+
 export function useAppStorage() {
   const [storage, setStorage] = useState<AppStorage>(defaultStorage);
   const [ready, setReady] = useState(false);
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
+  const storageRef = useRef<AppStorage>(defaultStorage);
+  const pendingCloudSaveRef = useRef(false);
+
+  const applyStorage = useCallback((next: AppStorage) => {
+    storageRef.current = next;
+    setStorage(next);
+  }, []);
+
+  const persistCloudStorage = useCallback((next: AppStorage) => {
+    void fetch("/api/storage", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+  }, []);
 
   useEffect(() => {
-    const loadLatestStorage = () => {
-      setStorage(loadAppStorage());
-      setReady(true);
-    };
-    const timer = window.setTimeout(() => {
-      loadLatestStorage();
-    }, 0);
+    let cancelled = false;
 
-    const handleBrowserStorage = (event: StorageEvent) => {
-      if (!event.key || event.key === "jp-interview-assistant:v1") {
-        loadLatestStorage();
+    async function loadCloudStorage() {
+      try {
+        const response = await fetch("/api/storage", {
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+          if (!pendingCloudSaveRef.current) {
+            applyStorage(defaultStorage);
+          }
+          setCloudSyncEnabled(false);
+          return;
+        }
+        const data = (await response.json()) as {
+          storage: AppStorage;
+        };
+        if (cancelled) {
+          return;
+        }
+        if (pendingCloudSaveRef.current) {
+          pendingCloudSaveRef.current = false;
+          setCloudSyncEnabled(true);
+          persistCloudStorage(storageRef.current);
+          return;
+        }
+        applyStorage(preferSessionActiveCompany(data.storage));
+        setCloudSyncEnabled(true);
+      } catch {
+        if (!cancelled) {
+          if (!pendingCloudSaveRef.current) {
+            applyStorage(defaultStorage);
+          }
+          setCloudSyncEnabled(false);
+        }
+      } finally {
+        if (!cancelled) {
+          setReady(true);
+        }
       }
-    };
+    }
 
-    window.addEventListener(APP_STORAGE_EVENT, loadLatestStorage);
-    window.addEventListener("storage", handleBrowserStorage);
+    void loadCloudStorage();
+    window.addEventListener(APP_STORAGE_EVENT, loadCloudStorage);
+
     return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener(APP_STORAGE_EVENT, loadLatestStorage);
-      window.removeEventListener("storage", handleBrowserStorage);
+      cancelled = true;
+      window.removeEventListener(APP_STORAGE_EVENT, loadCloudStorage);
     };
-  }, []);
+  }, [applyStorage, persistCloudStorage]);
 
   const commit = useCallback(
     (buildNext: (current: AppStorage) => AppStorage) => {
-      const next = buildNext(loadAppStorage());
-      setStorage(next);
-      saveAppStorage(next);
+      const next = buildNext(storageRef.current);
+      writePreferredActiveCompanyId(next.activeCompanyId);
+      applyStorage(next);
+      if (cloudSyncEnabled) {
+        persistCloudStorage(next);
+      } else {
+        pendingCloudSaveRef.current = true;
+      }
     },
-    [],
+    [applyStorage, cloudSyncEnabled, persistCloudStorage],
   );
 
   const actions = useMemo(
@@ -138,6 +224,12 @@ export function useAppStorage() {
       saveSession(record: SessionRecord) {
         commit((current) => addSessionRecord(current, record));
       },
+      saveGroupDiscussionSession(session: GroupDiscussionSessionRecord) {
+        commit((current) => upsertGroupDiscussionSession(current, session));
+      },
+      deleteGroupDiscussionSession(id: string) {
+        commit((current) => deleteGroupDiscussionSession(current, id));
+      },
       saveLearning(learning: PreInterviewLearning) {
         commit((current) => saveLearning(current, learning));
       },
@@ -158,10 +250,24 @@ export function useAppStorage() {
       },
       clearAll() {
         clearAppStorage();
-        setStorage(defaultStorage);
+        writePreferredActiveCompanyId(null);
+        window.localStorage.setItem(LOCAL_STORAGE_IMPORT_STATUS_KEY, "declined");
+        setCloudSyncEnabled(true);
+        applyStorage(defaultStorage);
+        pendingCloudSaveRef.current = false;
+        if (cloudSyncEnabled) {
+          void fetch("/api/storage", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              storage: defaultStorage,
+              allowEmptyOverwrite: true,
+            }),
+          });
+        }
       },
     }),
-    [commit],
+    [applyStorage, cloudSyncEnabled, commit],
   );
 
   return {

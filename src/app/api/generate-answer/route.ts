@@ -1,5 +1,6 @@
 import { zodTextFormat } from "openai/helpers/zod";
 
+import { requireApiUser } from "@/lib/auth/server";
 import { createOpenAIClient } from "@/lib/openai/client";
 import { getServerEnv } from "@/lib/openai/env";
 import { extractPartialAnswer } from "@/lib/openai/partial-json";
@@ -16,6 +17,15 @@ import {
   validateAnswerLength,
 } from "@/lib/schemas/interview";
 import { mockGenerateAnswer, streamMockAnswer } from "@/lib/test/mock-openai";
+import { estimateGenerateAnswerTokens } from "@/lib/tokens/ai-estimates";
+import {
+  createRequestIds,
+  releaseAiTokenReservation,
+  reserveAiTokens,
+  settleAiTokens,
+  TokenBalanceError,
+} from "@/lib/tokens/service";
+import { extractOpenAIUsage } from "@/lib/tokens/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +43,11 @@ function resolveAnswerModel(
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const auth = await requireApiUser();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   const parsed = generateAnswerRequestSchema.safeParse(await request.json());
   if (!parsed.success) {
     return Response.json(
@@ -43,6 +58,29 @@ export async function POST(request: Request): Promise<Response> {
 
   const env = getServerEnv();
   const body = parsed.data;
+  const model = resolveAnswerModel(env, body.answerModelMode);
+  const { requestId, operationId } = createRequestIds(request);
+  let reservation;
+
+  try {
+    reservation = await reserveAiTokens({
+      userId: auth.user.id,
+      requestId,
+      operationId,
+      feature: "generate-answer",
+      provider: env.AI_PROVIDER,
+      model,
+      estimatedAmount: estimateGenerateAnswerTokens(body),
+    });
+  } catch (error) {
+    if (error instanceof TokenBalanceError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
+    return Response.json(
+      { error: "トークン予約に失敗しました。" },
+      { status: 500 },
+    );
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -58,6 +96,10 @@ export async function POST(request: Request): Promise<Response> {
           for await (const partial of streamMockAnswer(draft)) {
             send("partial", partial);
           }
+          await settleAiTokens(reservation, {
+            inputTokens: Math.ceil(JSON.stringify(body).length / 3),
+            outputTokens: Math.ceil(draft.answer.length / 3),
+          });
           send("done", {
             draft,
             length: validateAnswerLength(draft.answer, body.answerLengthTarget),
@@ -69,8 +111,8 @@ export async function POST(request: Request): Promise<Response> {
         const client = createOpenAIClient();
         const responseStream = client.responses.stream(
           {
-            model: resolveAnswerModel(env, body.answerModelMode),
-            instructions: buildAnswerInstructions(),
+            model,
+            instructions: buildAnswerInstructions(body.answerLanguage),
             input: buildAnswerInput(body),
             text: {
               format: zodTextFormat(answerDraftSchema, "answer_draft"),
@@ -95,12 +137,14 @@ export async function POST(request: Request): Promise<Response> {
         const draft =
           finalResponse.output_parsed ??
           answerDraftSchema.parse(JSON.parse(buffer));
+        await settleAiTokens(reservation, extractOpenAIUsage(finalResponse));
         send("done", {
           draft,
           length: validateAnswerLength(draft.answer, body.answerLengthTarget),
         });
         controller.close();
       } catch (error) {
+        await releaseAiTokenReservation(reservation, "stream_failed");
         send("error", { error: toPublicError(error) });
         controller.close();
       }

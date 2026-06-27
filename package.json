@@ -11,10 +11,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "tokens:grant-test": "node scripts/grant-test-tokens.mjs",
+    "tokens:release-expired": "node scripts/release-expired-reservations.mjs",
+    "supabase:verify-rls": "node scripts/verify-rls.mjs",
     "format": "prettier --check .",
     "format:write": "prettier --write ."
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.2",
     "clsx": "^2.1.1",
     "lucide-react": "^1.21.0",
     "next": "16.2.9",
@@ -22,6 +27,8 @@
     "pdfjs-dist": "^5.4.296",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
+    "stripe": "^22.2.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -39,6 +46,7 @@
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^29.1.1",
     "prettier": "^3.8.4",
+    "supabase": "^2.107.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.9"

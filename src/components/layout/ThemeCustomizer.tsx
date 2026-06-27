@@ -12,7 +12,11 @@ import {
 } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-export function ThemeCustomizer() {
+export function ThemeCustomizer({
+  tone = "light",
+}: {
+  tone?: "light" | "dark";
+}) {
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(defaultAppTheme);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -63,11 +67,6 @@ export function ThemeCustomizer() {
     setTheme(nextTheme);
   }
 
-  const selectedTheme =
-    appThemeOptions.find((option) => option.id === theme) ??
-    appThemeOptions.find((option) => option.id === defaultAppTheme) ??
-    appThemeOptions[0];
-
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -75,7 +74,12 @@ export function ThemeCustomizer() {
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
         aria-controls="theme-customizer"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-[#6e6e73] transition hover:text-[#1d1d1f]"
+        className={cn(
+          "inline-flex items-center gap-1.5 text-xs font-medium transition",
+          tone === "dark"
+            ? "text-white/50 hover:text-white"
+            : "text-[#6e6e73] hover:text-[#1d1d1f]",
+        )}
       >
         <Palette className="h-3.5 w-3.5" aria-hidden />
         Customize
@@ -84,18 +88,13 @@ export function ThemeCustomizer() {
       {open ? (
         <div
           id="theme-customizer"
-          className="absolute bottom-full left-0 z-30 mb-3 w-72 rounded-[24px] bg-white p-4 shadow-lg ring-1 ring-black/[0.08]"
+          className="absolute bottom-full left-0 z-30 mb-3 w-[18.5rem] rounded-[24px] bg-white p-3 shadow-lg ring-1 ring-black/[0.08]"
         >
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent)]">
-              Theme
-            </p>
-            <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent)]">
-              {selectedTheme.label}
-            </span>
-          </div>
-
-          <div className="mt-4 grid grid-cols-7 gap-2" role="radiogroup">
+          <div
+            className="grid grid-cols-7 gap-2"
+            role="radiogroup"
+            aria-label="Theme color"
+          >
             {appThemeOptions.map((option) => {
               const selected = option.id === theme;
               return (
@@ -118,14 +117,6 @@ export function ThemeCustomizer() {
                 </button>
               );
             })}
-          </div>
-
-          <div className="mt-3 grid grid-cols-7 gap-2 text-center text-[10px] font-semibold text-[#86868b]">
-            {appThemeOptions.map((option) => (
-              <span key={option.id} className="truncate">
-                {option.label}
-              </span>
-            ))}
           </div>
         </div>
       ) : null}
