@@ -1,18 +1,70 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST as classifyQuestion } from "@/app/api/classify-question/route";
 import { POST as generateAnswer } from "@/app/api/generate-answer/route";
+import { POST as groupDiscussionAiTurn } from "@/app/api/group-discussion/ai-turn/route";
+import { POST as groupDiscussionFinalize } from "@/app/api/group-discussion/finalize/route";
+import { POST as groupDiscussionTopic } from "@/app/api/group-discussion/topic/route";
 import { POST as importProfileFile } from "@/app/api/import-profile-file/route";
 import { POST as learnInterviewContext } from "@/app/api/learn-interview-context/route";
+import { POST as realtimeSession } from "@/app/api/realtime-session/route";
 import { POST as researchCompany } from "@/app/api/research-company/route";
 import {
   createEmptyCompanyProfile,
   createEmptyUserProfile,
 } from "@/lib/schemas/interview";
+import { createDefaultAiParticipants } from "@/lib/group-discussion/mock";
+import type { GroupDiscussionSessionRecord } from "@/lib/schemas/groupDiscussion";
+import { resetTestTokenState } from "@/lib/tokens/service";
+
+const testUserId = "00000000-0000-4000-8000-000000000001";
 
 describe("API routes in mock mode", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     process.env.AI_MOCK_MODE = "true";
+    process.env.TEST_AUTH_USER_ID = testUserId;
+    process.env.TOKEN_TEST_MODE = "true";
+    delete process.env.OPENAI_TRANSCRIPTION_DELAY;
+    delete process.env.OPENAI_AUDIO_NOISE_REDUCTION;
+    resetTestTokenState(testUserId, 100000);
+  });
+
+  it("rejects unauthenticated protected API calls", async () => {
+    delete process.env.TEST_AUTH_USER_ID;
+
+    const response = await classifyQuestion(
+      new Request("http://localhost/api/classify-question", {
+        method: "POST",
+        body: JSON.stringify({
+          transcript: "これまでの経験について教えてください",
+          speaker: "remote",
+          source: "remote-audio",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("does not run AI work when app token balance is insufficient", async () => {
+    resetTestTokenState(testUserId, 0);
+
+    const response = await classifyQuestion(
+      new Request("http://localhost/api/classify-question", {
+        method: "POST",
+        body: JSON.stringify({
+          transcript: "これまでの経験について教えてください",
+          speaker: "remote",
+          source: "remote-audio",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(402);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "トークン残高が不足しています。現在の残高をご確認ください。",
+    });
   });
 
   it("classifies a simulated transcript", async () => {
@@ -32,6 +84,26 @@ describe("API routes in mock mode", () => {
       isQuestion: true,
       category: "experience",
     });
+  });
+
+  it("does not rate limit repeated interview AI requests", async () => {
+    const responses = await Promise.all(
+      Array.from({ length: 75 }, (_, index) =>
+        classifyQuestion(
+          new Request("http://localhost/api/classify-question", {
+            method: "POST",
+            body: JSON.stringify({
+              transcript: `これは動作確認です ${index}`,
+              speaker: "local",
+              source: "manual",
+            }),
+          }),
+        ),
+      ),
+    );
+
+    expect(responses.every((response) => response.status !== 429)).toBe(true);
+    expect(responses.every((response) => response.ok)).toBe(true);
   });
 
   it("streams a structured answer", async () => {
@@ -127,5 +199,254 @@ describe("API routes in mock mode", () => {
     await expect(response.json()).resolves.toMatchObject({
       keyPoints: expect.any(Array),
     });
+  });
+
+  it("runs a group discussion mock API flow", async () => {
+    const topicResponse = await groupDiscussionTopic(
+      new Request("http://localhost/api/group-discussion/topic", {
+        method: "POST",
+        body: JSON.stringify({
+          category: "金融",
+          difficulty: "standard",
+          companyContext: "金融インフラの安全性を重視する企業",
+          profileContext: "研究で仮説検証を行った",
+        }),
+      }),
+    );
+    expect(topicResponse.ok).toBe(true);
+    const topic = (await topicResponse.json()) as { topic: string };
+    expect(topic.topic).toContain("金融");
+
+    const now = new Date().toISOString();
+    const session: GroupDiscussionSessionRecord = {
+      id: "gd-test-session",
+      mode: "ai-participants",
+      status: "active",
+      topic: topic.topic,
+      topicCategory: "金融",
+      durationMinutes: 20,
+      userRole: "参加者",
+      participants: [
+        {
+          id: "user",
+          name: "あなた",
+          role: "参加者",
+          stance: "論点整理を練習する",
+          type: "user",
+        },
+        ...createDefaultAiParticipants(),
+      ],
+      utterances: [
+        {
+          id: "utt-1",
+          sessionId: "gd-test-session",
+          speakerId: "user",
+          speakerName: "あなた",
+          speakerType: "user",
+          text: "まず前提を整理して、継続利用と安全性を評価基準にしたいです。",
+          source: "text",
+          startedAt: now,
+          endedAt: now,
+          durationSeconds: 8,
+          analysis: null,
+        },
+      ],
+      discussionMap: {
+        nodes: [
+          {
+            id: "topic",
+            type: "topic",
+            label: topic.topic,
+            evidenceUtteranceIds: [],
+          },
+        ],
+        edges: [],
+      },
+      metrics: null,
+      finalEvaluation: null,
+      saveTranscript: true,
+      createdAt: now,
+      startedAt: now,
+      endedAt: null,
+      updatedAt: now,
+    };
+
+    const aiResponse = await groupDiscussionAiTurn(
+      new Request("http://localhost/api/group-discussion/ai-turn", {
+        method: "POST",
+        body: JSON.stringify({ session }),
+      }),
+    );
+    expect(aiResponse.ok).toBe(true);
+    await expect(aiResponse.json()).resolves.toMatchObject({
+      utterance: {
+        speakerType: "ai",
+      },
+    });
+
+    const finalizeResponse = await groupDiscussionFinalize(
+      new Request("http://localhost/api/group-discussion/finalize", {
+        method: "POST",
+        body: JSON.stringify({ session }),
+      }),
+    );
+    expect(finalizeResponse.ok).toBe(true);
+    await expect(finalizeResponse.json()).resolves.toMatchObject({
+      metrics: {
+        questionCount: expect.any(Object),
+      },
+      finalEvaluation: {
+        totalScore: expect.any(Number),
+      },
+    });
+  });
+
+  it("returns a bounded realtime reservation in mock mode", async () => {
+    process.env.APP_REALTIME_SESSION_RESERVATION_SECONDS = "10";
+
+    const response = await realtimeSession(
+      new Request("http://localhost/api/realtime-session", {
+        method: "POST",
+      }),
+    );
+
+    expect(response.ok).toBe(true);
+    await expect(response.json()).resolves.toMatchObject({
+      reservationSeconds: 10,
+      reservationExpiresAt: expect.any(String),
+    });
+  });
+
+  it("uses accuracy-biased realtime transcription while enabling input cleanup", async () => {
+    process.env.AI_MOCK_MODE = "false";
+    process.env.AI_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.OPENAI_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
+    delete process.env.OPENAI_TRANSCRIPTION_DELAY;
+    delete process.env.OPENAI_AUDIO_NOISE_REDUCTION;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          value: "ephemeral-token",
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    const response = await realtimeSession(
+      new Request("http://localhost/api/realtime-session", {
+        method: "POST",
+      }),
+    );
+
+    expect(response.ok).toBe(true);
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body));
+    expect(body.session.audio.input.transcription).toMatchObject({
+      model: "gpt-realtime-whisper",
+      language: "ja",
+      delay: "high",
+    });
+    expect(body.session.audio.input.transcription.prompt).toContain(
+      "フェルミ推定",
+    );
+    expect(body.session.audio.input.noise_reduction).toEqual({
+      type: "far_field",
+    });
+    expect(body.session.audio.input.turn_detection).toBeNull();
+  });
+
+  it("passes explicit realtime transcription tuning to OpenAI", async () => {
+    process.env.AI_MOCK_MODE = "false";
+    process.env.AI_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.OPENAI_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
+    process.env.OPENAI_TRANSCRIPTION_DELAY = "medium";
+    process.env.OPENAI_AUDIO_NOISE_REDUCTION = "near_field";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ value: "ephemeral-token" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await realtimeSession(
+      new Request("http://localhost/api/realtime-session", {
+        method: "POST",
+      }),
+    );
+
+    expect(response.ok).toBe(true);
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body));
+    expect(body.session.audio.input.transcription.delay).toBe("medium");
+    expect(body.session.audio.input.noise_reduction).toEqual({
+      type: "near_field",
+    });
+  });
+
+  it("lets the client request xhigh realtime transcription for a session", async () => {
+    process.env.AI_MOCK_MODE = "false";
+    process.env.AI_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.OPENAI_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
+    process.env.OPENAI_TRANSCRIPTION_DELAY = "high";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ value: "ephemeral-token" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await realtimeSession(
+      new Request("http://localhost/api/realtime-session", {
+        method: "POST",
+        body: JSON.stringify({ transcriptionDelay: "xhigh" }),
+      }),
+    );
+
+    expect(response.ok).toBe(true);
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body));
+    expect(body.session.audio.input.transcription.delay).toBe("xhigh");
+  });
+
+  it("falls back when realtime transcription prompt is rejected", async () => {
+    process.env.AI_MOCK_MODE = "false";
+    process.env.AI_PROVIDER = "openai";
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.OPENAI_TRANSCRIPTION_MODEL = "gpt-realtime-whisper";
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "unsupported prompt" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ value: "ephemeral-token" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    const response = await realtimeSession(
+      new Request("http://localhost/api/realtime-session", {
+        method: "POST",
+      }),
+    );
+
+    expect(response.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const secondBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(firstBody.session.audio.input.transcription.prompt).toContain(
+      "フェルミ推定",
+    );
+    expect(secondBody.session.audio.input.transcription.prompt).toBeUndefined();
   });
 });

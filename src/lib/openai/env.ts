@@ -1,8 +1,16 @@
+import "server-only";
+
 import { z } from "zod";
+import { realtimeTranscriptionDelays } from "@/lib/openai/transcription-delay";
 
 const booleanEnvSchema = z
   .enum(["true", "false", "1", "0"])
   .default("false")
+  .transform((value) => value === "true" || value === "1");
+
+const enabledBooleanEnvSchema = z
+  .enum(["true", "false", "1", "0"])
+  .default("true")
   .transform((value) => value === "true" || value === "1");
 
 const serverEnvSchema = z.object({
@@ -10,9 +18,23 @@ const serverEnvSchema = z.object({
   AI_MOCK_MODE: booleanEnvSchema,
   OPENAI_API_KEY: z.string().trim().min(1).optional(),
   OPENAI_TRANSCRIPTION_MODEL: z.string().default("gpt-realtime-whisper"),
+  OPENAI_TRANSCRIPTION_DELAY: z
+    .enum(realtimeTranscriptionDelays)
+    .default("high"),
+  OPENAI_AUDIO_NOISE_REDUCTION: z
+    .enum(["near_field", "far_field", "off"])
+    .default("far_field"),
   OPENAI_CLASSIFIER_MODEL: z.string().default("gpt-5.4-nano"),
   OPENAI_ANSWER_MODEL: z.string().default("gpt-5.4-mini"),
   OPENAI_RESEARCH_MODEL: z.string().default("gpt-5.5"),
+  OPENAI_GROUP_DISCUSSION_MODEL: z.string().default("gpt-5.5"),
+  OPENAI_GD_MOCK_MODE: booleanEnvSchema,
+  COMPANY_INTELLIGENCE_STRICT_MODE: enabledBooleanEnvSchema,
+  COMPANY_INTELLIGENCE_MOCK_MODE: booleanEnvSchema,
+  COMPANY_INTELLIGENCE_DEEP_RESEARCH_MODEL: z
+    .string()
+    .default("o4-mini-deep-research"),
+  COMPANY_INTELLIGENCE_SYNTHESIS_MODEL: z.string().default("gpt-5.5"),
   OPENAI_MOCK_MODE: booleanEnvSchema,
   GROQ_API_KEY: z.string().trim().min(1).optional(),
   GROQ_TRANSCRIPTION_MODEL: z.string().default("whisper-large-v3-turbo"),
@@ -30,19 +52,31 @@ export type ServerEnv = RawServerEnv & {
   FAST_ANSWER_MODEL: string;
   ANSWER_MODEL: string;
   RESEARCH_MODEL: string;
+  GROUP_DISCUSSION_MODEL: string;
 };
 
 export function getServerEnv(): ServerEnv {
-  const rawProvider =
-    process.env.AI_PROVIDER || (process.env.GROQ_API_KEY ? "groq" : "openai");
+  const rawProvider = process.env.AI_PROVIDER || "openai";
   const parsed = serverEnvSchema.parse({
     AI_PROVIDER: rawProvider,
     AI_MOCK_MODE: process.env.AI_MOCK_MODE,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_TRANSCRIPTION_MODEL: process.env.OPENAI_TRANSCRIPTION_MODEL,
+    OPENAI_TRANSCRIPTION_DELAY: process.env.OPENAI_TRANSCRIPTION_DELAY,
+    OPENAI_AUDIO_NOISE_REDUCTION: process.env.OPENAI_AUDIO_NOISE_REDUCTION,
     OPENAI_CLASSIFIER_MODEL: process.env.OPENAI_CLASSIFIER_MODEL,
     OPENAI_ANSWER_MODEL: process.env.OPENAI_ANSWER_MODEL,
     OPENAI_RESEARCH_MODEL: process.env.OPENAI_RESEARCH_MODEL,
+    OPENAI_GROUP_DISCUSSION_MODEL:
+      process.env.OPENAI_GROUP_DISCUSSION_MODEL,
+    OPENAI_GD_MOCK_MODE: process.env.OPENAI_GD_MOCK_MODE,
+    COMPANY_INTELLIGENCE_STRICT_MODE:
+      process.env.COMPANY_INTELLIGENCE_STRICT_MODE,
+    COMPANY_INTELLIGENCE_MOCK_MODE: process.env.COMPANY_INTELLIGENCE_MOCK_MODE,
+    COMPANY_INTELLIGENCE_DEEP_RESEARCH_MODEL:
+      process.env.COMPANY_INTELLIGENCE_DEEP_RESEARCH_MODEL,
+    COMPANY_INTELLIGENCE_SYNTHESIS_MODEL:
+      process.env.COMPANY_INTELLIGENCE_SYNTHESIS_MODEL,
     OPENAI_MOCK_MODE: process.env.OPENAI_MOCK_MODE,
     GROQ_API_KEY: process.env.GROQ_API_KEY,
     GROQ_TRANSCRIPTION_MODEL: process.env.GROQ_TRANSCRIPTION_MODEL,
@@ -74,6 +108,10 @@ export function getServerEnv(): ServerEnv {
       parsed.AI_PROVIDER === "groq"
         ? parsed.GROQ_RESEARCH_MODEL
         : parsed.OPENAI_RESEARCH_MODEL,
+    GROUP_DISCUSSION_MODEL:
+      parsed.AI_PROVIDER === "groq"
+        ? parsed.GROQ_ANSWER_MODEL
+        : parsed.OPENAI_GROUP_DISCUSSION_MODEL,
   };
 }
 

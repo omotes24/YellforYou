@@ -6,11 +6,15 @@ import {
   type SessionRecord,
   type UserProfile,
 } from "@/lib/schemas/interview";
+import type { GroupDiscussionSessionRecord } from "@/lib/schemas/groupDiscussion";
 
 export const STORAGE_KEY = "jp-interview-assistant:v1";
 export const COMPANY_FORM_DRAFT_KEY =
   "jp-interview-assistant:company-form-draft:v1";
 export const APP_STORAGE_EVENT = "jp-interview-assistant:storage-updated";
+export const LOCAL_STORAGE_IMPORT_STATUS_KEY =
+  "jp-interview-assistant:local-import-status:v1";
+export const LOCAL_STORAGE_IMPORT_VERSION = "app-storage-v1-to-supabase-v1";
 
 export const defaultStorage: AppStorage = {
   profiles: [],
@@ -20,6 +24,7 @@ export const defaultStorage: AppStorage = {
   selectedProfileIds: [],
   selectedCompanyIds: [],
   history: [],
+  groupDiscussionSessions: [],
   learning: null,
   privacy: {
     saveHistoryByDefault: false,
@@ -57,12 +62,15 @@ function normalizeStorage(storage: AppStorage): AppStorage {
     storage.selectedCompanyIds,
     storage.companies,
   );
-  const fallbackCompanyId =
-    selectedCompanyIds[0] ??
-    (storage.activeCompanyId &&
+  const validActiveCompanyId =
+    storage.activeCompanyId &&
     storage.companies.some((company) => company.id === storage.activeCompanyId)
       ? storage.activeCompanyId
-      : storage.companies[0]?.id) ??
+      : null;
+  const fallbackCompanyId =
+    validActiveCompanyId ??
+    selectedCompanyIds[0] ??
+    storage.companies[0]?.id ??
     null;
   const normalizedCompanyIds =
     selectedCompanyIds.length > 0
@@ -70,13 +78,19 @@ function normalizeStorage(storage: AppStorage): AppStorage {
       : fallbackCompanyId
         ? [fallbackCompanyId]
         : [];
+  const companyIdsWithActive =
+    validActiveCompanyId &&
+    !normalizedCompanyIds.includes(validActiveCompanyId)
+      ? [validActiveCompanyId, ...normalizedCompanyIds]
+      : normalizedCompanyIds;
 
   return {
     ...storage,
     selectedProfileIds: normalizedProfileIds,
     activeProfileId: normalizedProfileIds[0] ?? fallbackProfileId,
-    selectedCompanyIds: normalizedCompanyIds,
-    activeCompanyId: normalizedCompanyIds[0] ?? fallbackCompanyId,
+    selectedCompanyIds: companyIdsWithActive,
+    activeCompanyId:
+      validActiveCompanyId ?? companyIdsWithActive[0] ?? fallbackCompanyId,
   };
 }
 
@@ -107,6 +121,16 @@ export function clearAppStorage(): void {
   window.localStorage.removeItem(STORAGE_KEY);
   window.localStorage.removeItem(COMPANY_FORM_DRAFT_KEY);
   window.dispatchEvent(new Event(APP_STORAGE_EVENT));
+}
+
+export function hasMeaningfulLocalStorage(storage: AppStorage): boolean {
+  return (
+    storage.profiles.length > 0 ||
+    storage.companies.length > 0 ||
+    storage.history.length > 0 ||
+    storage.groupDiscussionSessions.length > 0 ||
+    Boolean(storage.learning)
+  );
 }
 
 export function upsertProfile(
@@ -191,7 +215,10 @@ export function setActiveCompany(
 ): AppStorage {
   const activeCompanyId =
     id && storage.companies.some((company) => company.id === id) ? id : null;
-  const selectedCompanyIds = activeCompanyId ? [activeCompanyId] : [];
+  const selectedCompanyIds =
+    activeCompanyId && !storage.selectedCompanyIds.includes(activeCompanyId)
+      ? [...storage.selectedCompanyIds, activeCompanyId]
+      : storage.selectedCompanyIds;
   return { ...storage, activeCompanyId, selectedCompanyIds };
 }
 
@@ -202,10 +229,15 @@ export function setSelectedCompanies(
   const selectedCompanyIds = ids.filter((id) =>
     storage.companies.some((company) => company.id === id),
   );
+  const activeCompanyId =
+    storage.activeCompanyId &&
+    selectedCompanyIds.includes(storage.activeCompanyId)
+      ? storage.activeCompanyId
+      : (selectedCompanyIds[0] ?? null);
   return {
     ...storage,
     selectedCompanyIds,
-    activeCompanyId: selectedCompanyIds[0] ?? null,
+    activeCompanyId,
   };
 }
 
@@ -216,15 +248,24 @@ export function toggleSelectedCompany(
   if (!storage.companies.some((company) => company.id === id)) {
     return storage;
   }
+  if (
+    storage.selectedCompanyIds.includes(id) &&
+    storage.activeCompanyId !== id
+  ) {
+    return { ...storage, activeCompanyId: id };
+  }
   const selectedCompanyIds = storage.selectedCompanyIds.includes(id)
     ? storage.selectedCompanyIds.length > 1
       ? storage.selectedCompanyIds.filter((item) => item !== id)
       : storage.selectedCompanyIds
     : [...storage.selectedCompanyIds, id];
+  const activeCompanyId = storage.selectedCompanyIds.includes(id)
+    ? selectedCompanyIds[0] ?? null
+    : id;
   return {
     ...storage,
     selectedCompanyIds,
-    activeCompanyId: selectedCompanyIds[0] ?? null,
+    activeCompanyId,
   };
 }
 
@@ -239,6 +280,12 @@ export function getActiveCompanies(storage: AppStorage): CompanyProfile[] {
 }
 
 export function getActiveCompany(storage: AppStorage): CompanyProfile | null {
+  const active = storage.companies.find(
+    (company) => company.id === storage.activeCompanyId,
+  );
+  if (active) {
+    return active;
+  }
   const selected = storage.selectedCompanyIds
     .map((id) => storage.companies.find((company) => company.id === id))
     .find(Boolean);
@@ -285,6 +332,32 @@ export function addSessionRecord(
   record: SessionRecord,
 ): AppStorage {
   return { ...storage, history: [record, ...storage.history].slice(0, 50) };
+}
+
+export function upsertGroupDiscussionSession(
+  storage: AppStorage,
+  session: GroupDiscussionSessionRecord,
+): AppStorage {
+  const sessions = storage.groupDiscussionSessions.some(
+    (item) => item.id === session.id,
+  )
+    ? storage.groupDiscussionSessions.map((item) =>
+        item.id === session.id ? session : item,
+      )
+    : [session, ...storage.groupDiscussionSessions];
+  return { ...storage, groupDiscussionSessions: sessions.slice(0, 50) };
+}
+
+export function deleteGroupDiscussionSession(
+  storage: AppStorage,
+  id: string,
+): AppStorage {
+  return {
+    ...storage,
+    groupDiscussionSessions: storage.groupDiscussionSessions.filter(
+      (session) => session.id !== id,
+    ),
+  };
 }
 
 export function saveLearning(

@@ -1,11 +1,12 @@
 import { zodTextFormat } from "openai/helpers/zod";
 
+import { requireApiUser } from "@/lib/auth/server";
 import {
   getCompanyInputCopy,
   getCompanyInputMode,
 } from "@/lib/company-input-mode";
 import { createOpenAIClient } from "@/lib/openai/client";
-import { getServerEnv, structuredOutputModel } from "@/lib/openai/env";
+import { getServerEnv } from "@/lib/openai/env";
 import {
   buildCompanyResearchInput,
   COMPANY_RESEARCH_INSTRUCTIONS,
@@ -18,11 +19,27 @@ import {
   type CompanyProfile,
   type ResearchCompanyRequest,
 } from "@/lib/schemas/interview";
+import { estimateResearchCompanyTokens } from "@/lib/tokens/ai-estimates";
+import {
+  createRequestIds,
+  releaseAiTokenReservation,
+  reserveAiTokens,
+  settleAiTokens,
+  TokenBalanceError,
+} from "@/lib/tokens/service";
+import { extractOpenAIUsage, type UsageParts } from "@/lib/tokens/usage";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
 const companyInputMode = getCompanyInputMode();
 const companyInputCopy = getCompanyInputCopy(companyInputMode);
+
+type CompanyResearchResult = {
+  output: CompanyResearchOutput | null;
+  usage: UsageParts;
+};
 
 function extractUrls(text: string): string[] {
   return Array.from(
@@ -66,7 +83,9 @@ function mockResearchCompany(request: ResearchCompanyRequest): CompanyProfile {
     researchSummary:
       companyInputMode === "url"
         ? "モックモードの調査結果です。実APIではResponses APIのweb_searchで企業サイトや採用情報を確認し、ユーザーの自己情報に合わせて要約します。"
-        : "モックモードの調査結果です。実APIでは入力された社風・採用情報・特筆事項を読み、ユーザーの自己情報に合わせて要約します。",
+        : researchSources.length > 0
+          ? "モックモードの調査結果です。実APIでは入力欄のURLや採用情報を確認し、ユーザーの自己情報に合わせて要約します。"
+          : "モックモードの調査結果です。実APIでは入力された社風・採用情報・特筆事項を読み、ユーザーの自己情報に合わせて要約します。",
     researchSources,
     fitHypotheses: [
       "SatoFCでの現場課題ヒアリングから開発・運用改善までの経験を、応募先の課題解決業務に接続できる。",
@@ -105,50 +124,120 @@ function toCompanyProfile(
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function countWebSearchCalls(response: unknown): number {
+  const output = asRecord(response)?.output;
+  if (!Array.isArray(output)) {
+    return 0;
+  }
+  return output.reduce((count, item) => {
+    return asRecord(item)?.type === "web_search_call" ? count + 1 : count;
+  }, 0);
+}
+
+async function runStructuredCompanyResearch(
+  client: ReturnType<typeof createOpenAIClient>,
+  model: string,
+  body: ResearchCompanyRequest,
+  signal: AbortSignal,
+  useWebSearch: boolean,
+): Promise<CompanyResearchResult> {
+  const response = await client.responses.parse(
+    {
+      model,
+      instructions: COMPANY_RESEARCH_INSTRUCTIONS,
+      input: buildCompanyResearchInput(body),
+      ...(useWebSearch
+        ? {
+            tools: [
+              {
+                type: "web_search" as const,
+                search_context_size: "high" as const,
+              },
+            ],
+            tool_choice: "required" as const,
+            include: ["web_search_call.action.sources" as const],
+          }
+        : {}),
+      text: {
+        format: zodTextFormat(companyResearchOutputSchema, "company_research"),
+      },
+      store: false,
+    },
+    { signal },
+  );
+
+  return {
+    output: response.output_parsed,
+    usage: {
+      ...extractOpenAIUsage(response),
+      webSearchCalls: useWebSearch
+        ? Math.max(countWebSearchCalls(response), 1)
+        : 0,
+    },
+  };
+}
+
 export async function POST(request: Request): Promise<Response> {
+  const auth = await requireApiUser();
+  if (!auth.ok) {
+    return auth.response;
+  }
+
   try {
     const body = researchCompanyRequestSchema.parse(await request.json());
     const env = getServerEnv();
+    const model = env.RESEARCH_MODEL;
+    const { requestId, operationId } = createRequestIds(request);
+    const reservation = await reserveAiTokens({
+      userId: auth.user.id,
+      requestId,
+      operationId,
+      feature: "research-company",
+      provider: env.AI_PROVIDER,
+      model,
+      estimatedAmount: estimateResearchCompanyTokens(body),
+    });
 
     if (env.AI_MOCK_MODE) {
+      await settleAiTokens(reservation, {
+        inputTokens: 800,
+        outputTokens: 1200,
+        webSearchCalls: env.AI_PROVIDER === "openai" ? 1 : 0,
+      });
       return Response.json(mockResearchCompany(body));
     }
 
-    const client = createOpenAIClient();
-    const response = await client.responses.parse(
-      {
-        model: structuredOutputModel(env),
-        instructions: COMPANY_RESEARCH_INSTRUCTIONS,
-        input: buildCompanyResearchInput(body),
-        ...(env.AI_PROVIDER === "openai"
-          ? {
-              tools: [
-                {
-                  type: "web_search" as const,
-                  search_context_size: "high" as const,
-                },
-              ],
-              tool_choice: "required" as const,
-              include: ["web_search_call.action.sources" as const],
-            }
-          : {}),
-        text: {
-          format: zodTextFormat(
-            companyResearchOutputSchema,
-            "company_research",
-          ),
-        },
-        store: false,
-      },
-      { signal: request.signal },
-    );
+    try {
+      const client = createOpenAIClient();
+      const result = await runStructuredCompanyResearch(
+        client,
+        model,
+        body,
+        request.signal,
+        env.AI_PROVIDER === "openai",
+      );
 
-    if (!response.output_parsed) {
-      return jsonError("企業調査結果の解析に失敗しました", 502);
+      if (!result.output) {
+        await releaseAiTokenReservation(reservation, "parse_failed");
+        return jsonError("企業調査結果の解析に失敗しました", 502);
+      }
+
+      await settleAiTokens(reservation, result.usage);
+      return Response.json(toCompanyProfile(result.output, body));
+    } catch (error) {
+      await releaseAiTokenReservation(reservation, "api_failed");
+      throw error;
     }
-
-    return Response.json(toCompanyProfile(response.output_parsed, body));
   } catch (error) {
+    if (error instanceof TokenBalanceError) {
+      return jsonError(error.message, error.status);
+    }
     return jsonError(toPublicError(error), 400);
   }
 }
